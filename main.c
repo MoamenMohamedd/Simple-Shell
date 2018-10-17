@@ -5,6 +5,7 @@
 #include <malloc.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <time.h>
 
 //functions prototyping
 char *readUserInput();
@@ -25,7 +26,18 @@ void executeBackground(char *tokens[], int numberOfTokens);
 
 void executeBlocking(char *tokens[]);
 
+FILE *pLogFile;
+time_t when;
+
 int main() {
+
+    //opens shell log file
+    pLogFile = fopen("/home/moamen/CLionProjects/HelloShell/Log.txt", "w");
+
+    if (pLogFile == NULL) {
+        fprintf(stderr, "Can't open log file");
+        exit(1);
+    }
 
     //show start up screen
     displayWelcomeScreen();
@@ -83,9 +95,11 @@ int main() {
 void runCommand(char *tokens[], int numberOfTokens) {
 
     //checks if it is a built in command first (exit,help,cd)
-    if (strcmp(tokens[0], "exit") == 0)
+    if (strcmp(tokens[0], "exit") == 0) {
+        fclose(pLogFile);
         exit(0);
-    else if (strcmp(tokens[0], "help") == 0)
+
+    } else if (strcmp(tokens[0], "help") == 0)
         showHelp();
     else if (strcmp(tokens[0], "cd") == 0)
         chdir(tokens[1]);
@@ -127,11 +141,11 @@ void executeBackground(char *tokens[], int numberOfTokens) {
     int pid = fork();
 
     if (pid == -1) {
-        printf("\nFailed forking child.");
+        puts("Failed forking child.");
         return;
     } else if (pid == 0) {//child
         if (execvp(tokens[0], tokens) < 0) {
-            printf("\nCommand couldn't be executed.");
+            puts("Command couldn't be executed.");
         }
     }
 
@@ -143,15 +157,16 @@ void executeBackground(char *tokens[], int numberOfTokens) {
  * @param tokens
  */
 void executeBlocking(char *tokens[]) {
+
     // create a new child process using fork()
     int pid = fork();
 
     if (pid == -1) {
-        printf("\nFailed forking child.");
+        puts("Failed forking child.");
         return;
     } else if (pid == 0) {//child
         if (execvp(tokens[0], tokens) < 0) {
-            printf("\nCommand couldn't be executed.");
+            puts("Command couldn't be executed.");
         }
     } else {//parent
 
@@ -290,7 +305,25 @@ char *readUserInput() {
 void handle_sigchld(int sig) {
 
     int saved_errno = errno;
-    while (waitpid((pid_t) (-1), 0, WNOHANG) > 0) {}
+
+    int status;
+
+    int pId;
+
+    while ((pId = waitpid((pid_t) (-1), &status, WNOHANG)) > 0) {
+
+        time(&when);
+
+        //child terminated
+        if (WIFEXITED(status))
+            fprintf(pLogFile, "\nChild process %d ended normally at %s." , pId ,ctime(&when));
+        else if (WIFSIGNALED(status))
+            fprintf(pLogFile, "\nChild process %d ended because of an uncaught signal at %s.", pId,ctime(&when));
+        else if (WIFSTOPPED(status))
+            fprintf(pLogFile, "\nChild process %d has stopped at %s.", pId,ctime(&when));
+
+    }
+
     errno = saved_errno;
 }
 
