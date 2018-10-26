@@ -22,7 +22,7 @@ void showHelp();
 
 void handle_sigchld(int sig);
 
-void executeBackground(char *tokens[], int numberOfTokens);
+void executeBackground(char *tokens[]);
 
 void executeBlocking(char *tokens[]);
 
@@ -32,10 +32,22 @@ time_t when;
 int main() {
 
     //opens shell log file
-    pLogFile = fopen("/home/moamen/CLionProjects/HelloShell/Log.txt", "w");
+    pLogFile = fopen("Log.txt", "w");
 
     if (pLogFile == NULL) {
         fprintf(stderr, "Can't open log file");
+        exit(1);
+    }
+
+    //registering a SIGCHLD signal handler using the sigaction function
+    //SIGCHLD signal is called whenever a child process pauses or continues or terminates
+    //we use SA_NOCLDSTOP flag to not receive the signal when child process pauses or continues
+    struct sigaction sa;
+    sa.sa_handler = &handle_sigchld;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+    if (sigaction(SIGCHLD, &sa, 0) == -1) {
+        perror(0);
         exit(1);
     }
 
@@ -107,8 +119,13 @@ void runCommand(char *tokens[], int numberOfTokens) {
 
         //decides weather to execute in background or to block parent
         //process until child terminates
-        if (strcmp(tokens[numberOfTokens - 1], "&") == 0)//if command ends with & then exec in background
-            executeBackground(tokens, numberOfTokens);
+        if (strcmp(tokens[numberOfTokens - 1], "&") == 0) {//if command ends with & then exec in background
+
+            //removes the & from tokens list by making it NULL
+            tokens[numberOfTokens - 1] = NULL;
+
+            executeBackground(tokens);
+        }
         else
             executeBlocking(tokens);
 
@@ -122,20 +139,7 @@ void runCommand(char *tokens[], int numberOfTokens) {
  * @param tokens
  * @param numberOfTokens
  */
-void executeBackground(char *tokens[], int numberOfTokens) {
-
-    //removes the & from tokens list by making it NULL
-    tokens[numberOfTokens - 1] = NULL;
-
-    //registering a signal handler using the sigaction function
-    struct sigaction sa;
-    sa.sa_handler = &handle_sigchld;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
-    if (sigaction(SIGCHLD, &sa, 0) == -1) {
-        perror(0);
-        exit(1);
-    }
+void executeBackground(char *tokens[]) {
 
     // create a new child process using fork()
     int pid = fork();
@@ -188,7 +192,6 @@ void showHelp() {
          "\n*>help                                               *"
          "\n*>cd                                                 *"
          "\n*>all other general commands available in UNIX shell *"
-         "\n*>no pipe handling                                   *"
          "\n******************************************************");
 }
 
@@ -204,10 +207,11 @@ void displayWelcomeScreen() {
  * delimiter is space
  *
  * @param str : pointer to the string to be split
+ * @param pNumberOfTokens : pointer to numberOfTokens integer
  *
  * @return char* (string array) of tokens
  */
-char **tokenize(char *str, int *pNumberOfTokens) {
+char** tokenize(char *str, int *pNumberOfTokens) {
 
     char **tokens = (char **) calloc(2, sizeof(char *));
     int currentTokenSize = 2;
@@ -265,7 +269,7 @@ void printCurrentDirectory() {
  *
  * @return char* (string) user entered
  */
-char *readUserInput() {
+char* readUserInput() {
 
     unsigned int len_max = 10;//initial size
     unsigned int current_size = 0;
@@ -316,11 +320,11 @@ void handle_sigchld(int sig) {
 
         //child terminated
         if (WIFEXITED(status))
-            fprintf(pLogFile, "\nChild process %d ended normally at %s." , pId ,ctime(&when));
+            fprintf(pLogFile, "\nChild process %d ended normally at %s", pId ,ctime(&when));
         else if (WIFSIGNALED(status))
-            fprintf(pLogFile, "\nChild process %d ended because of an uncaught signal at %s.", pId,ctime(&when));
+            fprintf(pLogFile, "\nChild process %d ended because of an uncaught signal at %s", pId,ctime(&when));
         else if (WIFSTOPPED(status))
-            fprintf(pLogFile, "\nChild process %d has stopped at %s.", pId,ctime(&when));
+            fprintf(pLogFile, "\nChild process %d has stopped at %s", pId,ctime(&when));
 
     }
 
